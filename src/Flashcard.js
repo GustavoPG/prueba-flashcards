@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { flashcardsData } from './data/kanji';
 
 // Helper function to shuffle an array using Fisher-Yates algorithm
@@ -47,8 +47,14 @@ export default function Flashcard() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [autoPlay, setAutoPlay] = useState(false);
+  const [showCanvas, setShowCanvas] = useState(false);
+
+  // Canvas Drawing States & Refs
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   // Quiz Mode State
+  const [quizModeType, setQuizModeType] = useState('meaning'); // 'meaning' | 'reading'
   const [quizQuestion, setQuizQuestion] = useState(null);
   const [quizOptions, setQuizOptions] = useState([]);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -69,6 +75,72 @@ export default function Flashcard() {
       window.speechSynthesis.speak(utterance);
     }
   };
+
+  // Drawing Canvas Helpers
+  const getCoordinates = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    
+    let clientX, clientY;
+    if (e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    
+    const x = ((clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((clientY - rect.top) / rect.height) * canvas.height;
+    return { x, y };
+  };
+
+  const startDrawing = (e) => {
+    e.stopPropagation();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = '#c084fc'; // neon purple-300
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    const { x, y } = getCoordinates(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+  };
+
+  const draw = (e) => {
+    e.stopPropagation();
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    const { x, y } = getCoordinates(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopDrawing = (e) => {
+    if (e) e.stopPropagation();
+    setIsDrawing(false);
+  };
+
+  const clearCanvas = (e) => {
+    if (e) e.stopPropagation();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  // Clear drawing canvas when active card changes
+  useEffect(() => {
+    clearCanvas();
+  }, [currentIndex]);
 
   // Favorite toggle helper
   const toggleFavorite = (e, kanji) => {
@@ -163,7 +235,7 @@ export default function Flashcard() {
       generateQuizQuestion();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, quizModeType]);
 
   const handleQuizAnswer = (option) => {
     if (hasAnswered) return;
@@ -308,6 +380,20 @@ export default function Flashcard() {
               >
                 <svg className="w-4.5 h-4.5" fill={showOnlyFavorites ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </button>
+              {/* Botón de activar Lienzo de Escritura */}
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowCanvas(!showCanvas); }}
+                className={`p-2.5 rounded-xl border transition-all duration-300 ${
+                  showCanvas
+                    ? 'bg-violet-600/20 border-violet-500/35 text-violet-300 shadow'
+                    : 'bg-slate-900/60 border-slate-800/60 text-slate-400 hover:text-slate-200'
+                }`}
+                title={showCanvas ? "Ocultar lienzo de escritura" : "Mostrar lienzo de escritura"}
+              >
+                <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
               </button>
             </div>
@@ -525,6 +611,57 @@ export default function Flashcard() {
                   </svg>
                 </button>
               </div>
+              
+              {/* LIENZO DE ESCRITURA */}
+              {showCanvas && (
+                <div 
+                  className="w-full max-w-md bg-slate-900/90 border border-slate-800/80 backdrop-blur-md rounded-2xl p-6 mt-6 flex flex-col items-center relative overflow-hidden shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="w-full flex justify-between items-center mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-350">Lienzo de Práctica</span>
+                      <span className="text-[10px] text-slate-500 uppercase bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700/50">
+                        Dibuja aquí
+                      </span>
+                    </div>
+                    <button
+                      onClick={clearCanvas}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-450 hover:text-white transition-all duration-300 border border-slate-700/60 text-xs font-semibold flex items-center gap-1.5"
+                      title="Limpiar lienzo"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      <span>Limpiar</span>
+                    </button>
+                  </div>
+
+                  {/* Rejilla de Fondo */}
+                  <div className="relative border border-slate-850/80 bg-slate-950/80 rounded-xl overflow-hidden cursor-crosshair shadow-inner w-[280px] h-[280px]">
+                    <div className="absolute left-1/2 top-0 bottom-0 border-l border-dashed border-slate-800/50 -translate-x-1/2 pointer-events-none" />
+                    <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-slate-800/50 -translate-y-1/2 pointer-events-none" />
+                    
+                    <canvas
+                      ref={canvasRef}
+                      width={280}
+                      height={280}
+                      className="absolute inset-0 z-10 w-full h-full bg-transparent"
+                      onMouseDown={startDrawing}
+                      onMouseMove={draw}
+                      onMouseUp={stopDrawing}
+                      onMouseLeave={stopDrawing}
+                      onTouchStart={startDrawing}
+                      onTouchMove={draw}
+                      onTouchEnd={stopDrawing}
+                    />
+                  </div>
+                  
+                  <span className="text-[10px] text-slate-500 mt-3">
+                    Práctica el trazo de **{currentCard.kanji}**
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -533,6 +670,30 @@ export default function Flashcard() {
         /* VISTA: MODO QUIZ (JUEGO DE PREGUNTAS) */
         <div className="w-full flex flex-col items-center max-w-md">
           
+          {/* Doble Modo de Quiz Selector */}
+          <div className="w-full flex justify-center items-center gap-2 mb-6 bg-slate-950/40 p-1 border border-slate-900 rounded-2xl max-w-xs">
+            <button
+              onClick={() => setQuizModeType('meaning')}
+              className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${
+                quizModeType === 'meaning'
+                  ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Significados
+            </button>
+            <button
+              onClick={() => setQuizModeType('reading')}
+              className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 ${
+                quizModeType === 'reading'
+                  ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Lecturas (Kana)
+            </button>
+          </div>
+
           {/* Marcador de Rachas (Streak) */}
           <div className="w-full flex justify-between items-center bg-slate-950/40 border border-slate-900 rounded-2xl p-4 mb-6">
             <div className="flex items-center gap-2">
@@ -562,7 +723,7 @@ export default function Flashcard() {
                 
                 <div className="w-full flex justify-between items-center z-10">
                   <span className="text-xs font-semibold tracking-wider text-indigo-400 uppercase bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/25">
-                    ¿Qué significa este Kanji?
+                    {quizModeType === 'meaning' ? '¿Qué significa este Kanji?' : '¿Cómo se lee este Kanji?'}
                   </span>
                   <button 
                     onClick={(e) => playAudio(e, quizQuestion.kanji)}
@@ -583,8 +744,14 @@ export default function Flashcard() {
 
                 {hasAnswered && (
                   <div className="text-center animate-fade-in z-10">
-                    <span className="block text-[10px] text-slate-500 uppercase font-semibold">Lectura</span>
-                    <span className="text-sm font-semibold text-slate-300">{quizQuestion.hiragana} ({quizQuestion.romaji})</span>
+                    <span className="block text-[10px] text-slate-500 uppercase font-semibold">
+                      {quizModeType === 'meaning' ? 'Lecturas' : 'Significado'}
+                    </span>
+                    <span className="text-sm font-semibold text-slate-300">
+                      {quizModeType === 'meaning' 
+                        ? `${quizQuestion.hiragana} (${quizQuestion.romaji})`
+                        : quizQuestion.meaning}
+                    </span>
                   </div>
                 )}
               </div>
@@ -614,7 +781,7 @@ export default function Flashcard() {
                       disabled={hasAnswered}
                       className={`w-full py-3.5 px-5 rounded-2xl border text-left text-sm font-medium transition-all duration-300 flex items-center justify-between transform active:scale-99 ${buttonStyle}`}
                     >
-                      <span>{option.meaning}</span>
+                      <span>{quizModeType === 'meaning' ? option.meaning : option.hiragana}</span>
                       {hasAnswered && isCorrect && (
                         <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
