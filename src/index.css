@@ -49,3 +49,13 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
 }
+
+/* Autoplay animation */
+@keyframes autoplayProgress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+.animate-progress-bar {
+  animation: autoplayProgress 3.5s linear forwards;
+}
+
